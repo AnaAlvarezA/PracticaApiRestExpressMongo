@@ -1,0 +1,157 @@
+'use strict';
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const MongoClient = require('mongodb').MongoClient;
+const app = express();
+
+// ==============================
+// Conectar a la base de datos
+// ==============================
+
+// url de conexión a la base de datoa
+const connectionString = "mongodb://localhost:27017";
+const dbName = "agenda";
+
+MongoClient.connect(connectionString, { useUnifiedTopology: true })
+  .then(client => {
+        const db = client.db(dbName)
+    const contactsCollection = db.collection('contacts');
+    console.log(`Conectado a la base de datos ${dbName}`);
+
+// ========================
+// Middlewares
+// ========================
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(express.static('public'));;
+
+const { check } = require('express-validator');
+
+//Reglas de validación
+    
+const validPerson = [
+    check('name', 'No es válido')
+      .isLength({ min: 3 })
+      .isAlpha(),
+    check('surnames', 'No es válido')
+      .isLength({ min: 3 })
+      .isAlpha(),
+    check('age', 'El número debe estar entre 0 y 125')
+      .isFloat({min:125,max:125})
+      .isLength({ min: 1 })
+      .isAlpha(),
+    check('dni', 'Introduce 8 números seguidos de 1 letra')
+      .isLength({ min: 9, max:9 })
+      .matches(/(^([0-9]{8,8}\-[A-Z])|^)$/)
+      .isAlphanumeric(),
+    check('birthday', 'No es válido')
+      .isISO8601()
+      .toDate(),
+    check('favouriteColour', 'No es válido')
+      .isLength({ min: 3 })
+      .isAlpha(),
+    check('sex', 'No es válido')
+      .isIn(['Hombre','Mujer','Otro','No especificado']),
+    check('notes', 'No es válido')
+      .isLength({ min: 3 })
+    ];
+
+// ========================
+// Rutas
+// ========================
+
+app.get('/', (req, res) => {
+  db.collection('contacts').find().toArray()
+    .then(contacts => {
+      res.render('index.ejs', { contacts: contacts });
+    })
+    .catch(error => console.error(error));
+});   
+
+app.get('/contacts', (req, res) => {
+  const name = req.body.name;
+  const surnames = req.body.surnames;
+  const age = req.body.age;
+  const dni = req.body.dni;
+  const birthday = req.body.birthday;
+  const favouriteColour = req.body.favouriteColour;
+  const sex = req.body.sex;
+  const notes = req.body.notes;
+  contactsCollection.find({name, surnames, age, dni, birthday, favouriteColour, sex, notes}).toArray()
+    .then(contacts => res.json('Listado correctamente'))
+    .catch(error => console.error(error));
+})    
+
+app.post('/contacts', validPerson, (req, res) => {
+  const name = req.body.name;
+  const surnames = req.body.surnames;
+  const age = req.body.age;
+  const dni = req.body.dni;
+  const birthday = req.body.birthday;
+  const favouriteColour = req.body.favouriteColour;
+  const sex = req.body.sex;
+  const notes = req.body.notes;
+  contactsCollection.insertOne({ name, surnames, age, dni, birthday, favouriteColour, sex, notes })
+    .then(result => {
+      res.redirect('/');
+    })
+    .catch(error => console.error(error));
+})   
+
+app.put('/contacts', validPerson, (req, res) => {
+  const name = req.body.name;
+  const surnames = req.body.surnames;
+  const age = req.body.age;
+  const dni = req.body.dni;
+  const birthday = req.body.birthday;
+  const favouriteColour = req.body.favouriteColour;
+  const sex = req.body.sex;
+  const notes = req.body.notes;
+  contactsCollection.findOneAndUpdate(
+    { name: name },
+    {
+      $set: {
+          name, 
+          surnames, 
+          age, 
+          dni, 
+          birthday, 
+          favouriteColour, 
+          sex, 
+          notes
+      }
+    },
+    {
+      upsert: true
+    }
+  )
+    .then(result => res.json('Cambiado correctamente'))
+    .catch(error => console.error(error));
+})
+
+app.delete('/contacts', (req, res) => {
+  contactsCollection.deleteOne(
+    { name: req.body.name }
+  )
+    .then(result => {
+      if (result.deletedCount === 0) {
+        return res.json('No hay ningún contacto para borrar')
+      }
+      res.json(`Borrado correctamente el contacto ${req.body.name}`);
+    })
+    .catch(error => console.error(error));
+})
+
+// ========================
+// Servidor HTTP
+// ========================
+
+const port = 3000;
+
+app.listen(port, function () {
+  console.log(`Servidor HTTP escuchando en el puerto ${port}`);
+})
+})
+.catch(console.error);
